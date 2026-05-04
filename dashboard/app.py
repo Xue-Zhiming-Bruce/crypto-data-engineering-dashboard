@@ -155,11 +155,12 @@ st.subheader("Price History")
 if price_history.empty:
     st.info("No price history loaded yet.")
 else:
-    chart_data = price_history.pivot(
+    chart_data = price_history.pivot_table(
         index="event_timestamp",
         columns="symbol",
         values="last_price",
-    )
+        aggfunc="last",
+    ).sort_index()
     st.line_chart(chart_data)
 
 if auto_refresh:
