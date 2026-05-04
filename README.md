@@ -103,8 +103,7 @@ Produce raw Kraken ticker messages to Kafka:
 
 ```bash
 .venv/bin/python src/ingestion/produce_kraken_ticker_to_kafka.py \
-  --symbols BTC/USD ETH/USD SOL/USD \
-  --limit 10
+  --symbols BTC/USD ETH/USD SOL/USD
 ```
 
 Preview messages from Kafka:
@@ -117,8 +116,7 @@ Preview messages from Kafka:
 Load Kafka messages into PostgreSQL:
 
 ```bash
-.venv/bin/python src/streaming/consume_kraken_ticker_to_postgres.py \
-  --limit 10
+.venv/bin/python src/streaming/consume_kraken_ticker_to_postgres.py
 ```
 
 Then start the dashboard:
@@ -126,6 +124,8 @@ Then start the dashboard:
 ```bash
 .venv/bin/streamlit run dashboard/app.py
 ```
+
+For a short test run, add `--limit 10` to the producer and consumer commands.
 
 ## Dashboard
 

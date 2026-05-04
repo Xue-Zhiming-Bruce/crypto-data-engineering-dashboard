@@ -11,7 +11,6 @@ WS_URL = "wss://ws.kraken.com/v2"
 DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
 CHANNEL = "ticker"
 CONNECT_TIMEOUT_SECONDS = 10
-DEFAULT_TICKER_MESSAGE_LIMIT = 10
 DEFAULT_BOOTSTRAP_SERVER = "localhost:9092"
 DEFAULT_TOPIC = "kraken_ticker_raw"
 
@@ -29,8 +28,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--limit",
         type=int,
-        default=DEFAULT_TICKER_MESSAGE_LIMIT,
-        help="Number of ticker messages to produce before exiting.",
+        default=None,
+        help="Optional number of ticker messages to produce before exiting.",
     )
     parser.add_argument(
         "--bootstrap-server",
@@ -58,7 +57,7 @@ def delivery_report(error, message) -> None:
 
 async def produce_ticker_messages(
     symbols: list[str],
-    limit: int,
+    limit: int | None,
     bootstrap_server: str,
     topic: str,
 ) -> None:
@@ -78,7 +77,7 @@ async def produce_ticker_messages(
     ) as websocket:
         await websocket.send(json.dumps(subscribe_message))
 
-        while ticker_messages_produced < limit:
+        while limit is None or ticker_messages_produced < limit:
             raw_message = await websocket.recv()
             message = json.loads(raw_message)
 
@@ -96,10 +95,7 @@ async def produce_ticker_messages(
             ticker_messages_produced += 1
 
     producer.flush()
-    print(
-        f"Produced {ticker_messages_produced} ticker messages "
-        f"to Kafka topic {topic}"
-    )
+    print(f"Produced {ticker_messages_produced} ticker messages to Kafka topic {topic}")
 
 
 def main() -> None:

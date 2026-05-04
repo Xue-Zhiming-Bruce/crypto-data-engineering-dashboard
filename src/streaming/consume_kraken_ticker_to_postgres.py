@@ -10,7 +10,6 @@ DEFAULT_BOOTSTRAP_SERVER = "localhost:9092"
 DEFAULT_TOPIC = "kraken_ticker_raw"
 DEFAULT_GROUP_ID = "kraken-ticker-postgres-consumer"
 DEFAULT_DATABASE_URL = "postgresql://crypto:crypto@localhost:5432/crypto"
-DEFAULT_ROW_LIMIT = 10
 SCHEMA_PATH = Path("sql/create_tables.sql")
 
 
@@ -69,8 +68,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--limit",
         type=int,
-        default=DEFAULT_ROW_LIMIT,
-        help="Number of ticker rows to load before exiting.",
+        default=None,
+        help="Optional number of ticker rows to load before exiting.",
     )
     return parser.parse_args()
 
@@ -111,7 +110,7 @@ def consume_to_postgres(
     topic: str,
     group_id: str,
     database_url: str,
-    limit: int,
+    limit: int | None,
 ) -> None:
     consumer = Consumer(
         {
@@ -129,7 +128,7 @@ def consume_to_postgres(
         ensure_database_schema(connection)
 
         try:
-            while rows_loaded < limit:
+            while limit is None or rows_loaded < limit:
                 message = consumer.poll(timeout=1.0)
 
                 if message is None:
