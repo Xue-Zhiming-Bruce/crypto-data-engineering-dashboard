@@ -19,7 +19,7 @@ DATABASE_URL = os.environ.get(
     "postgresql://crypto:crypto@localhost:5432/crypto",
 )
 DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
-REFRESH_INTERVAL_SECONDS = 5
+REFRESH_INTERVAL_SECONDS = 1
 
 
 @st.cache_data(ttl=5)
