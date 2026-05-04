@@ -5,12 +5,14 @@ import socket
 
 from confluent_kafka import Producer
 import websockets
+from websockets.exceptions import ConnectionClosed
 
 
 WS_URL = "wss://ws.kraken.com/v2"
 DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
 CHANNEL = "ticker"
 CONNECT_TIMEOUT_SECONDS = 10
+RECONNECT_DELAY_SECONDS = 5
 DEFAULT_BOOTSTRAP_SERVER = "localhost:9092"
 DEFAULT_TOPIC = "kraken_ticker_raw"
 
@@ -71,30 +73,41 @@ async def produce_ticker_messages(
     }
     ticker_messages_produced = 0
 
-    async with websockets.connect(
-        WS_URL,
-        open_timeout=CONNECT_TIMEOUT_SECONDS,
-    ) as websocket:
-        await websocket.send(json.dumps(subscribe_message))
-
+    try:
         while limit is None or ticker_messages_produced < limit:
-            raw_message = await websocket.recv()
-            message = json.loads(raw_message)
+            try:
+                async with websockets.connect(
+                    WS_URL,
+                    open_timeout=CONNECT_TIMEOUT_SECONDS,
+                ) as websocket:
+                    await websocket.send(json.dumps(subscribe_message))
+                    print(f"Subscribed to Kraken ticker for: {', '.join(symbols)}")
 
-            if message.get("channel") != CHANNEL:
-                continue
+                    while limit is None or ticker_messages_produced < limit:
+                        raw_message = await websocket.recv()
+                        message = json.loads(raw_message)
 
-            symbol = message.get("data", [{}])[0].get("symbol")
-            producer.produce(
-                topic,
-                key=symbol,
-                value=json.dumps(message),
-                callback=delivery_report,
-            )
-            producer.poll(0)
-            ticker_messages_produced += 1
+                        if message.get("channel") != CHANNEL:
+                            continue
 
-    producer.flush()
+                        symbol = message.get("data", [{}])[0].get("symbol")
+                        producer.produce(
+                            topic,
+                            key=symbol,
+                            value=json.dumps(message),
+                            callback=delivery_report,
+                        )
+                        producer.poll(0)
+                        ticker_messages_produced += 1
+            except ConnectionClosed as error:
+                print(
+                    "Kraken WebSocket disconnected "
+                    f"({error}). Reconnecting in {RECONNECT_DELAY_SECONDS} seconds..."
+                )
+                await asyncio.sleep(RECONNECT_DELAY_SECONDS)
+    finally:
+        producer.flush()
+
     print(f"Produced {ticker_messages_produced} ticker messages to Kafka topic {topic}")
 
 
