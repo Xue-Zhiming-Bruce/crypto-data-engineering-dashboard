@@ -78,8 +78,19 @@ st.set_page_config(page_title="Crypto Market Dashboard", layout="wide")
 st.title("Crypto Market Dashboard")
 
 with st.sidebar:
+    st.header("Mode")
+    dashboard_mode = st.radio(
+        "Data mode",
+        options=["Batch", "Streaming"],
+    )
     st.header("Refresh")
-    auto_refresh = st.checkbox("Auto refresh", value=True)
+    if st.button("Refresh data"):
+        st.cache_data.clear()
+        st.rerun()
+    auto_refresh = dashboard_mode == "Streaming" and st.checkbox(
+        "Auto refresh",
+        value=True,
+    )
 
 latest_prices = read_sql(latest_prices_query)
 price_history = read_sql(price_history_query)
