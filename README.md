@@ -260,26 +260,3 @@ src/
   streaming/
   transform/
 ```
-
-## Useful Commands
-
-Explore Kraken WebSocket messages:
-
-```bash
-.venv/bin/python src/ingestion/explore_kraken_ws.py
-```
-
-Collect a short local batch sample:
-
-```bash
-.venv/bin/python src/ingestion/ingest_kraken_ticker_raw.py \
-  --symbols BTC/USD ETH/USD SOL/USD \
-  --limit 10
-```
-
-Preview Kafka messages:
-
-```bash
-.venv/bin/python src/streaming/consume_kraken_ticker_from_kafka.py \
-  --limit 10
-```
