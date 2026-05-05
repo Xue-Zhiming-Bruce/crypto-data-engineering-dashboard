@@ -118,8 +118,7 @@ Collect raw Kraken ticker messages as JSONL:
 
 ```bash
 .venv/bin/python src/ingestion/ingest_kraken_ticker_raw.py \
-  --symbols BTC/USD ETH/USD SOL/USD \
-  --limit 10
+  --symbols BTC/USD ETH/USD SOL/USD
 ```
 
 Transform the latest raw JSONL file into CSV:
@@ -251,38 +250,13 @@ scripts/
   run_streaming_pipeline.sh
 
 sql/
-  create_tables.sql
-  latest_price_per_symbol.sql
-  price_history.sql
+  postgres/
+    create_tables.sql
 
 src/
   ingestion/
   load/
-  pipeline/
   quality/
   streaming/
   transform/
-```
-
-## Useful Commands
-
-Explore Kraken WebSocket messages:
-
-```bash
-.venv/bin/python src/ingestion/explore_kraken_ws.py
-```
-
-Run the original local batch pipeline into PostgreSQL:
-
-```bash
-.venv/bin/python src/pipeline/run_local_pipeline.py \
-  --symbols BTC/USD ETH/USD SOL/USD \
-  --limit 10
-```
-
-Preview Kafka messages:
-
-```bash
-.venv/bin/python src/streaming/consume_kraken_ticker_from_kafka.py \
-  --limit 10
 ```

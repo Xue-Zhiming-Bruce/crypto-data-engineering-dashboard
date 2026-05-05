@@ -10,7 +10,7 @@ DEFAULT_BOOTSTRAP_SERVER = "localhost:9092"
 DEFAULT_TOPIC = "kraken_ticker_raw"
 DEFAULT_GROUP_ID = "kraken-ticker-postgres-consumer"
 DEFAULT_DATABASE_URL = "postgresql://crypto:crypto@localhost:5432/crypto"
-SCHEMA_PATH = Path("sql/create_tables.sql")
+SCHEMA_PATH = Path("sql/postgres/create_tables.sql")
 
 
 INSERT_TICKER_SQL = """
