@@ -3,6 +3,7 @@ import sys
 import time
 from pathlib import Path
 
+from google.cloud import bigquery
 import pandas as pd
 import psycopg
 import streamlit as st
@@ -18,12 +19,15 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql://crypto:crypto@localhost:5432/crypto",
 )
+DASHBOARD_SOURCE = os.environ.get("DASHBOARD_SOURCE", "postgres").lower()
+BIGQUERY_PROJECT_ID = os.environ.get("BIGQUERY_PROJECT_ID", "dido-486313")
+BIGQUERY_DATASET_ID = os.environ.get("BIGQUERY_DATASET_ID", "crypto_analytics")
 DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
 REFRESH_INTERVAL_SECONDS = 1
 
 
 @st.cache_data(ttl=5)
-def read_sql(query: str) -> pd.DataFrame:
+def read_postgres(query: str) -> pd.DataFrame:
     with psycopg.connect(DATABASE_URL) as connection:
         with connection.cursor() as cursor:
             cursor.execute(query)
@@ -33,44 +37,132 @@ def read_sql(query: str) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
+@st.cache_data(ttl=5)
+def read_bigquery(query: str, project_id: str) -> pd.DataFrame:
+    client = bigquery.Client(project=project_id)
+    result = client.query(query).result()
+    rows = [dict(row) for row in result]
+    columns = [field.name for field in result.schema]
+
+    return pd.DataFrame(rows, columns=columns)
+
+
+def read_sql(query: str, source: str) -> pd.DataFrame:
+    if source == "bigquery":
+        return read_bigquery(query, BIGQUERY_PROJECT_ID)
+    return read_postgres(query)
+
+
 @st.cache_data(ttl=3600)
 def kraken_usd_pairs() -> list[str]:
     return usd_pairs(fetch_asset_pairs())
 
 
-latest_prices_query = """
-SELECT DISTINCT ON (symbol)
+def bigquery_table(table_id: str) -> str:
+    return f"`{BIGQUERY_PROJECT_ID}.{BIGQUERY_DATASET_ID}.{table_id}`"
+
+
+def postgres_ticker_table() -> str:
+    return "kraken_ticker"
+
+
+def latest_prices_query(source: str) -> str:
+    if source == "bigquery":
+        table = bigquery_table("latest_price_per_symbol")
+        return f"""
+SELECT
     symbol,
     last_price,
     volume,
     change,
     change_pct,
     event_timestamp
-FROM kraken_ticker
-ORDER BY symbol, event_timestamp DESC;
+FROM {table}
+ORDER BY symbol;
 """
 
-price_history_query = """
+    table = postgres_ticker_table()
+    return f"""
+SELECT
+    symbol,
+    last_price,
+    volume,
+    change,
+    change_pct,
+    event_timestamp
+FROM (
+    SELECT
+        symbol,
+        last_price,
+        volume,
+        change,
+        change_pct,
+        event_timestamp,
+        ROW_NUMBER() OVER (
+            PARTITION BY symbol
+            ORDER BY event_timestamp DESC
+        ) AS row_number
+    FROM {table}
+)
+WHERE row_number = 1
+ORDER BY symbol;
+"""
+
+
+def price_history_query(source: str) -> str:
+    if source == "bigquery":
+        table = bigquery_table("price_history")
+    else:
+        table = postgres_ticker_table()
+
+    return f"""
 SELECT
     symbol,
     last_price,
     volume,
     event_timestamp
-FROM kraken_ticker
+FROM {table}
 ORDER BY event_timestamp, symbol;
 """
 
-recent_ticks_query = """
+
+def recent_ticks_query(source: str) -> str:
+    if source == "bigquery":
+        table = bigquery_table("price_history")
+    else:
+        table = postgres_ticker_table()
+
+    return f"""
 SELECT
     symbol,
     last_price,
     volume,
-    change,
-    change_pct,
     event_timestamp
-FROM kraken_ticker
+FROM {table}
 ORDER BY event_timestamp DESC, symbol
 LIMIT 200;
+"""
+
+
+def records_by_symbol_query(source: str) -> str:
+    if source == "bigquery":
+        table = bigquery_table("message_count_per_symbol")
+        return f"""
+SELECT
+    symbol,
+    record_count
+FROM {table}
+ORDER BY symbol;
+"""
+
+    table = postgres_ticker_table()
+    return f"""
+SELECT
+    symbol,
+    COUNT(*) AS record_count
+FROM {table}
+GROUP BY symbol
+ORDER BY symbol;
 """
 
 
@@ -79,10 +171,13 @@ st.title("Crypto Market Dashboard")
 
 with st.sidebar:
     st.header("Mode")
+    default_mode = "Batch" if DASHBOARD_SOURCE == "bigquery" else "Streaming"
     dashboard_mode = st.radio(
         "Data mode",
         options=["Batch", "Streaming"],
+        index=["Batch", "Streaming"].index(default_mode),
     )
+    data_source = "bigquery" if dashboard_mode == "Batch" else "postgres"
     st.header("Refresh")
     if st.button("Refresh data"):
         st.cache_data.clear()
@@ -92,9 +187,10 @@ with st.sidebar:
         value=True,
     )
 
-latest_prices = read_sql(latest_prices_query)
-price_history = read_sql(price_history_query)
-recent_ticks = read_sql(recent_ticks_query)
+latest_prices = read_sql(latest_prices_query(data_source), data_source)
+price_history = read_sql(price_history_query(data_source), data_source)
+recent_ticks = read_sql(recent_ticks_query(data_source), data_source)
+records_by_symbol = read_sql(records_by_symbol_query(data_source), data_source)
 
 if not price_history.empty:
     price_history["event_timestamp"] = pd.to_datetime(price_history["event_timestamp"])
@@ -107,6 +203,11 @@ if not latest_prices.empty:
 if not recent_ticks.empty:
     recent_ticks["event_timestamp"] = pd.to_datetime(recent_ticks["event_timestamp"])
     recent_ticks["last_price"] = pd.to_numeric(recent_ticks["last_price"])
+
+if not records_by_symbol.empty:
+    records_by_symbol["record_count"] = pd.to_numeric(
+        records_by_symbol["record_count"]
+    )
 
 try:
     available_symbols = kraken_usd_pairs()
@@ -129,6 +230,9 @@ with st.sidebar:
 latest_prices = latest_prices[latest_prices["symbol"].isin(selected_symbols)]
 price_history = price_history[price_history["symbol"].isin(selected_symbols)]
 recent_ticks = recent_ticks[recent_ticks["symbol"].isin(selected_symbols)].head(20)
+records_by_symbol = records_by_symbol[
+    records_by_symbol["symbol"].isin(selected_symbols)
+]
 
 latest_event_time = None
 if not price_history.empty:
@@ -161,6 +265,16 @@ st.dataframe(latest_prices, width="stretch")
 
 st.subheader("Recent Ticks")
 st.dataframe(recent_ticks, width="stretch")
+
+st.subheader("Records by Symbol")
+if records_by_symbol.empty:
+    st.info("No record count data loaded yet.")
+else:
+    st.bar_chart(
+        records_by_symbol.set_index("symbol")["record_count"],
+        x_label="Symbol",
+        y_label="Records",
+    )
 
 st.subheader("Price History")
 if price_history.empty:

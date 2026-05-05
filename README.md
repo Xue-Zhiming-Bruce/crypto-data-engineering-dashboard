@@ -1,153 +1,120 @@
-# Crypto Data Engineering Final Project
+# Crypto Market Data Pipeline
 
-This project builds a small batch data pipeline using public Kraken crypto
-ticker data. The goal is to practice the main steps of a data engineering
-workflow: extracting data from an API, saving raw data, transforming it into a
-clean format, checking data quality, loading it into a database, and visualizing
-the result in a simple dashboard.
+This project builds a small end-to-end data engineering pipeline for Kraken
+cryptocurrency ticker data. It supports both a batch analytics path and a live
+streaming path, then serves the data through a Streamlit dashboard.
 
-## Success Criteria
+The project uses public Kraken WebSocket ticker messages for `BTC/USD`,
+`ETH/USD`, and `SOL/USD`.
 
-The local MVP is complete when:
+## Architecture
 
-- I can collect sample ticker data from Kraken.
-- I can save the raw data locally.
-- I can transform the raw data into a clean table.
-- I can run basic data quality checks.
-- I can load the clean data into PostgreSQL.
-- I can view the data in a Streamlit dashboard.
-- The README explains how to run the project from scratch.
+```mermaid
+flowchart LR
+    Kraken["Kraken WebSocket"]
 
-## MVP Completion Checklist
+    Kraken --> BatchRaw["Raw JSONL files"]
+    BatchRaw --> GCS["GCS raw data lake"]
+    BatchRaw --> CSV["Processed CSV"]
+    CSV --> BigQueryRaw["BigQuery kraken_ticker"]
+    BigQueryRaw --> dbt["dbt models"]
+    dbt --> BigQueryMarts["BigQuery analytics marts"]
+    BigQueryMarts --> DashboardBatch["Streamlit batch mode"]
 
-- [x] API ingestion from Kraken.
-- [x] Raw JSONL storage.
-- [x] CSV transformation.
-- [x] Basic data quality checks.
-- [x] PostgreSQL table creation and loading.
-- [x] SQL queries for latest prices and price history.
-- [x] Streamlit dashboard.
-- [x] Local run instructions.
+    Kraken --> Kafka["Kafka topic"]
+    Kafka --> Consumer["Kafka consumer"]
+    Consumer --> Postgres["PostgreSQL live table"]
+    Postgres --> DashboardStreaming["Streamlit streaming mode"]
+```
 
-Current MVP scope:
+## Tech Stack
 
-- Exchange: Kraken
-- Symbols: `BTC/USD`, `ETH/USD`, `SOL/USD`
-- Source: Kraken WebSocket ticker channel
-- Raw format: JSONL
-- Processed format: CSV
-- Storage: PostgreSQL
+- **Python**: ingestion, transformation, loading, and streaming workers
+- **Kraken WebSocket API**: ticker data source
+- **Kafka**: streaming message broker
+- **PostgreSQL**: live serving database for streaming dashboard mode
+- **GCS**: raw JSONL data lake
+- **BigQuery**: analytics warehouse
+- **dbt**: BigQuery analytics models and tests
+- **Terraform**: GCS and BigQuery infrastructure
+- **Streamlit**: dashboard
+- **Docker Compose**: local PostgreSQL and Kafka services
 
-## Project Status
+## Data Model
 
-This repository currently contains a working local MVP. It is designed as a
-learning project, not a production crypto trading system.
+The core ticker table contains:
 
-Current limitations:
+```text
+symbol
+event_type
+last_price
+volume
+vwap
+low_price
+high_price
+change
+change_pct
+event_timestamp
+```
 
-- Data is stored locally instead of in a cloud data lake.
-- PostgreSQL is used as the local analytical database.
-- The pipeline is run manually from the command line.
-- Transformations are simple Python and SQL scripts instead of dbt models.
+dbt builds analytics models on top of the BigQuery table:
 
-Possible future upgrades:
-
-- Store raw and processed files in GCS.
-- Load clean data into BigQuery.
-- Add dbt models and tests for analytics transformations.
-- Schedule the pipeline with an orchestrator such as Kestra.
-- Extend the Kafka streaming path with more production-like topic and consumer
-  design.
+- `latest_price_per_symbol`
+- `price_history`
+- `hourly_price_summary`
+- `message_count_per_symbol`
 
 ## Setup
 
-Create and use the project virtual environment:
+Create the virtual environment and install dependencies:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-Start PostgreSQL:
+Start the local services:
 
 ```bash
 docker compose up -d
 ```
 
-## Run The Full Local MVP
+## Cloud Infrastructure
 
-After setting up the virtual environment and starting PostgreSQL, run the full
-local pipeline:
+Terraform provisions:
 
-```bash
-.venv/bin/python src/pipeline/run_local_pipeline.py \
-  --symbols BTC/USD ETH/USD SOL/USD \
-  --limit 10
-```
+- one GCS bucket for raw Kraken JSONL files
+- one BigQuery dataset
+- one BigQuery table for clean Kraken ticker records
 
-Then start the dashboard:
+Create a local Terraform variables file:
 
 ```bash
-.venv/bin/streamlit run dashboard/app.py
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 ```
 
-## Run Kafka Streaming Mode
+Edit `infra/terraform/terraform.tfvars`:
 
-Start PostgreSQL and Kafka:
+```hcl
+project_id          = "your-gcp-project-id"
+raw_bucket_name     = "your-unique-raw-bucket-name"
+region              = "us-central1"
+location            = "US"
+bigquery_dataset_id = "crypto_analytics"
+```
+
+Apply the infrastructure:
 
 ```bash
-docker compose up -d
+cd infra/terraform
+terraform init
+terraform plan
+terraform apply
 ```
 
-Produce raw Kraken ticker messages to Kafka:
+## Batch Analytics Pipeline
 
-```bash
-.venv/bin/python src/ingestion/produce_kraken_ticker_to_kafka.py \
-  --symbols BTC/USD ETH/USD SOL/USD
-```
-
-Preview messages from Kafka:
-
-```bash
-.venv/bin/python src/streaming/consume_kraken_ticker_from_kafka.py \
-  --limit 10
-```
-
-Load Kafka messages into PostgreSQL:
-
-```bash
-.venv/bin/python src/streaming/consume_kraken_ticker_to_postgres.py
-```
-
-Then start the dashboard:
-
-```bash
-.venv/bin/streamlit run dashboard/app.py
-```
-
-For a short test run, add `--limit 10` to the producer and consumer commands.
-
-## Dashboard
-
-The Streamlit dashboard reads clean ticker records from PostgreSQL and shows:
-
-- Selected symbol count.
-- Latest event timestamp.
-- Latest price cards by symbol.
-- Recent ticker records.
-- Price history line chart.
-
-## Explore The API
-
-Print a few Kraken WebSocket messages:
-
-```bash
-.venv/bin/python src/ingestion/explore_kraken_ws.py
-```
-
-## Ingest Raw Data
-
-Collect a small sample of ticker messages and save them as JSONL:
+Collect raw Kraken ticker messages as JSONL:
 
 ```bash
 .venv/bin/python src/ingestion/ingest_kraken_ticker_raw.py \
@@ -155,45 +122,157 @@ Collect a small sample of ticker messages and save them as JSONL:
   --limit 10
 ```
 
-Output folder:
-
-```text
-data/raw/kraken_ticker/
-```
-
-## Transform Data
-
-Convert the latest raw JSONL file into a clean CSV:
+Transform the latest raw JSONL file into CSV:
 
 ```bash
 .venv/bin/python src/transform/kraken_ticker_to_csv.py
 ```
 
-Or transform a specific raw file:
-
-```bash
-.venv/bin/python src/transform/kraken_ticker_to_csv.py \
-  --input data/raw/kraken_ticker/<raw-file>.jsonl
-```
-
-Output folder:
-
-```text
-data/processed/kraken_ticker/
-```
-
-## Check Data Quality
-
-Run simple checks on a processed CSV:
+Run data quality checks:
 
 ```bash
 .venv/bin/python src/quality/check_kraken_ticker_csv.py \
   --input data/processed/kraken_ticker/<processed-file>.csv
 ```
 
-## Run Local Pipeline
+Upload raw JSONL files to GCS:
 
-Run ingestion, transformation, quality checks, table creation, and PostgreSQL loading in one command:
+```bash
+.venv/bin/python src/load/upload_raw_kraken_jsonl_to_gcs.py \
+  --bucket crypto-dashboard
+```
+
+Load the latest processed CSV into BigQuery:
+
+```bash
+.venv/bin/python src/load/load_kraken_ticker_csv_to_bigquery.py
+```
+
+For a clean development reload, replace the BigQuery table contents:
+
+```bash
+.venv/bin/python src/load/load_kraken_ticker_csv_to_bigquery.py --replace
+```
+
+Run dbt transformations and tests:
+
+```bash
+export BIGQUERY_PROJECT_ID=dido-486313
+.venv/bin/dbt debug --profiles-dir dbt
+.venv/bin/dbt run --profiles-dir dbt
+.venv/bin/dbt test --profiles-dir dbt
+```
+
+## Streaming Pipeline
+
+The streaming path reads Kraken WebSocket messages, publishes them to Kafka,
+loads them into PostgreSQL, and refreshes the dashboard from PostgreSQL.
+
+Run the full streaming demo:
+
+```bash
+./scripts/run_streaming_pipeline.sh
+```
+
+Run it with custom symbols:
+
+```bash
+./scripts/run_streaming_pipeline.sh BTC/USD ETH/USD SOL/USD
+```
+
+The helper starts PostgreSQL, Kafka, the Kafka producer, the PostgreSQL
+consumer, and the Streamlit dashboard. Press `Ctrl+C` in that terminal to stop
+the helper worker processes.
+
+To run the streaming pieces manually, use separate terminals:
+
+```bash
+.venv/bin/python src/streaming/consume_kraken_ticker_to_postgres.py
+```
+
+```bash
+.venv/bin/python src/ingestion/produce_kraken_ticker_to_kafka.py \
+  --symbols BTC/USD ETH/USD SOL/USD
+```
+
+```bash
+DASHBOARD_SOURCE=postgres .venv/bin/streamlit run dashboard/app.py
+```
+
+## Dashboard
+
+Start the dashboard in streaming mode:
+
+```bash
+DASHBOARD_SOURCE=postgres .venv/bin/streamlit run dashboard/app.py
+```
+
+Start the dashboard in batch analytics mode:
+
+```bash
+DASHBOARD_SOURCE=bigquery .venv/bin/streamlit run dashboard/app.py
+```
+
+Dashboard modes:
+
+- **Streaming mode** reads the live PostgreSQL table populated by the Kafka
+  consumer.
+- **Batch mode** reads dbt mart tables in BigQuery.
+
+The dashboard shows:
+
+- selected symbol count
+- latest event timestamp
+- latest price cards
+- recent ticker records
+- records by symbol bar chart
+- price history line chart
+
+## Project Structure
+
+```text
+dashboard/
+  app.py
+
+dbt/
+  profiles.yml
+
+infra/terraform/
+  main.tf
+  variables.tf
+  outputs.tf
+  terraform.tfvars.example
+
+models/
+  staging/
+  marts/
+
+scripts/
+  run_streaming_pipeline.sh
+
+sql/
+  create_tables.sql
+  latest_price_per_symbol.sql
+  price_history.sql
+
+src/
+  ingestion/
+  load/
+  pipeline/
+  quality/
+  streaming/
+  transform/
+```
+
+## Useful Commands
+
+Explore Kraken WebSocket messages:
+
+```bash
+.venv/bin/python src/ingestion/explore_kraken_ws.py
+```
+
+Run the original local batch pipeline into PostgreSQL:
 
 ```bash
 .venv/bin/python src/pipeline/run_local_pipeline.py \
@@ -201,41 +280,9 @@ Run ingestion, transformation, quality checks, table creation, and PostgreSQL lo
   --limit 10
 ```
 
-## Query Latest Prices
-
-Run the first analytics query:
+Preview Kafka messages:
 
 ```bash
-docker exec -i crypto-postgres psql -U crypto -d crypto -f - \
-  < sql/latest_price_per_symbol.sql
-```
-
-Run the price history query:
-
-```bash
-docker exec -i crypto-postgres psql -U crypto -d crypto -f - \
-  < sql/price_history.sql
-```
-
-## Run Dashboard
-
-Start the Streamlit dashboard:
-
-```bash
-.venv/bin/streamlit run dashboard/app.py
-```
-
-## Run Streaming Mode
-
-Run the streaming worker in one terminal:
-
-```bash
-.venv/bin/python src/ingestion/stream_kraken_ticker_to_postgres.py \
-  --symbols BTC/USD ETH/USD SOL/USD
-```
-
-Then run the dashboard in another terminal:
-
-```bash
-.venv/bin/streamlit run dashboard/app.py
+.venv/bin/python src/streaming/consume_kraken_ticker_from_kafka.py \
+  --limit 10
 ```
