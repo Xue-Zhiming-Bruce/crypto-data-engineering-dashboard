@@ -250,14 +250,12 @@ scripts/
   run_streaming_pipeline.sh
 
 sql/
-  create_tables.sql
-  latest_price_per_symbol.sql
-  price_history.sql
+  postgres/
+    create_tables.sql
 
 src/
   ingestion/
   load/
-  pipeline/
   quality/
   streaming/
   transform/
@@ -271,10 +269,10 @@ Explore Kraken WebSocket messages:
 .venv/bin/python src/ingestion/explore_kraken_ws.py
 ```
 
-Run the original local batch pipeline into PostgreSQL:
+Collect a short local batch sample:
 
 ```bash
-.venv/bin/python src/pipeline/run_local_pipeline.py \
+.venv/bin/python src/ingestion/ingest_kraken_ticker_raw.py \
   --symbols BTC/USD ETH/USD SOL/USD \
   --limit 10
 ```
