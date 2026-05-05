@@ -12,7 +12,7 @@ WS_URL = "wss://ws.kraken.com/v2"
 DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
 CHANNEL = "ticker"
 CONNECT_TIMEOUT_SECONDS = 10
-DEFAULT_TICKER_MESSAGE_LIMIT = 10
+DEFAULT_TICKER_MESSAGE_LIMIT = 1000
 RAW_DATA_DIR = Path("data/raw/kraken_ticker")
 
 
@@ -35,7 +35,10 @@ def parse_args() -> argparse.Namespace:
         "--limit",
         type=int,
         default=DEFAULT_TICKER_MESSAGE_LIMIT,
-        help="Number of ticker messages to write before exiting.",
+        help=(
+            "Number of ticker messages to write before exiting. "
+            f"Defaults to {DEFAULT_TICKER_MESSAGE_LIMIT}."
+        ),
     )
     return parser.parse_args()
 

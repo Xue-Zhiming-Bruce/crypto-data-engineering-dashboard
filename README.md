@@ -118,8 +118,7 @@ Collect raw Kraken ticker messages as JSONL:
 
 ```bash
 .venv/bin/python src/ingestion/ingest_kraken_ticker_raw.py \
-  --symbols BTC/USD ETH/USD SOL/USD \
-  --limit 10
+  --symbols BTC/USD ETH/USD SOL/USD
 ```
 
 Transform the latest raw JSONL file into CSV:
