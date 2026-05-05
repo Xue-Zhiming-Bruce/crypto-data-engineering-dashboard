@@ -6,3 +6,13 @@ data/raw/
 data/processed/
 
 .DS_Store
+
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform.tfvars.json
+
+target/
+logs/
+dbt/.user.yml

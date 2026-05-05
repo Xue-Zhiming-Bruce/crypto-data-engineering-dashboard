@@ -1,0 +1,27 @@
+version: 2
+
+sources:
+  - name: crypto_raw
+    database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+    schema: "{{ env_var('BIGQUERY_DATASET_ID', 'crypto_analytics') }}"
+    tables:
+      - name: kraken_ticker
+        description: Clean Kraken ticker events loaded into BigQuery.
+        columns:
+          - name: symbol
+            tests:
+              - not_null
+          - name: event_timestamp
+            tests:
+              - not_null
+
+models:
+  - name: stg_kraken_ticker
+    description: Typed and lightly cleaned Kraken ticker events.
+    columns:
+      - name: symbol
+        tests:
+          - not_null
+      - name: event_timestamp
+        tests:
+          - not_null

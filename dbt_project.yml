@@ -1,0 +1,19 @@
+name: crypto_dashboard
+version: "1.0.0"
+config-version: 2
+
+profile: crypto_dashboard
+
+model-paths: ["models"]
+
+models:
+  crypto_dashboard:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+      +partition_by:
+        field: event_date
+        data_type: date
+        granularity: day
+      +cluster_by: ["symbol"]

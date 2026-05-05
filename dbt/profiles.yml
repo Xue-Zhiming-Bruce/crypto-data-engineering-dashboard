@@ -1,0 +1,11 @@
+crypto_dashboard:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+      dataset: "{{ env_var('BIGQUERY_DATASET_ID', 'crypto_analytics') }}"
+      location: "{{ env_var('BIGQUERY_LOCATION', 'US') }}"
+      threads: 4
+      priority: interactive
